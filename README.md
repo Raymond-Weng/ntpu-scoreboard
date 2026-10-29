@@ -42,8 +42,8 @@
 ## 🚀 快速開始
 
 ```bash
-git clone <this-repo>
-cd scoreboard
+git clone https://github.com/Raymond-Weng/ntpu-scoreboard.git
+cd ntpu-scoreboard
 python3 scoreboard.py
 ```
 
