@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>練習賽計分板</title>
+<style>
+  :root { --bg:#0f1419; --panel:#182028; --line:#2a3440; --fg:#e6edf3; --dim:#8b98a5;
+          --ac:#1f9d55; --first:#0b6b3a; --wa:#b03a3a; --pend:#b58a00; --accent:#4ea1ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,"PingFang TC","Noto Sans TC",sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:14px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  h1 { margin:0; font-size:22px; }
+  .clock { margin-left:auto; text-align:right; font-variant-numeric:tabular-nums; }
+  .clock .big { font-size:30px; font-weight:700; }
+  .clock .small { color:var(--dim); font-size:13px; }
+  .bar { height:6px; background:var(--line); }
+  .bar > div { height:100%; background:var(--accent); width:0; transition:width 1s linear; }
+  .bar.frozen > div { background:#7aa7ff; }
+  button { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px 14px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
+  main { display:grid; grid-template-columns:1fr 280px; gap:16px; padding:16px 20px; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:center; }
+  th { color:var(--dim); font-weight:500; font-size:13px; }
+  td.name { text-align:left; font-weight:600; white-space:nowrap; }
+  button.pin { background:none; border:0; padding:0 6px 0 0; color:var(--dim); font-size:15px; cursor:pointer; opacity:.35; }
+  tr:hover button.pin, button.pin.on { opacity:1; }
+  button.pin.on { color:#ffd700; }
+  tr.pin-top td { background:rgba(78,161,255,.10); }
+  tr.is-pinned:not(.pin-top) td.name { color:#ffd700; }
+  tr.pin-sep td { color:var(--dim); font-size:12px; text-align:left; padding:10px 8px 4px; border-bottom:1px solid var(--line); }
+  td.rank { width:44px; color:var(--dim); }
+  tr.top1 td.rank { color:#ffd700; } tr.top2 td.rank { color:#c0c0c0; } tr.top3 td.rank { color:#cd7f32; }
+  .cell { border-radius:5px; padding:3px 0; min-width:62px; font-size:13px; line-height:1.15; }
+  .cell.ac { background:var(--ac); } .cell.first { background:var(--first); outline:2px solid #3fe08a; }
+  .cell.wa { background:var(--wa); } .cell.pend { background:var(--pend); color:#000; }
+  .cell small { opacity:.8; }
+  .side { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; align-self:start; }
+  .side h3 { margin:0 0 8px; font-size:14px; color:var(--dim); font-weight:500; }
+  .feed div { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed var(--line); }
+  .v-AC { color:#3fe08a; } .v-WA,.v-TLE,.v-RE,.v-MLE,.v-OLE,.v-PE { color:#ff7b7b; } .v-CE { color:var(--dim); }
+  dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:10px; min-width:340px; }
+  dialog label { display:block; margin:8px 0; }
+  dialog input { width:100%; padding:6px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:5px; font:inherit; }
+  .plist div { display:flex; justify-content:space-between; align-items:center; padding:4px 0; }
+  .stat-h { margin:28px 0 6px; font-size:14px; color:var(--dim); font-weight:500; }
+  table.stats td:first-child { text-align:left; }
+  table.stats tr.sum td { font-weight:700; border-top:2px solid var(--line); }
+  .ratebar { display:inline-block; width:60px; height:6px; background:var(--line); border-radius:3px; vertical-align:middle; margin-right:6px; }
+  .ratebar > i { display:block; height:100%; background:var(--ac); border-radius:3px; }
+  .awake { font-size:12px; color:var(--dim); cursor:pointer; }
+  .awake.on { color:#3fe08a; }
+  .empty { color:var(--dim); padding:40px; text-align:center; }
+  body.viewer #startBtn, body.viewer #backBtn, body.viewer #addBtn, body.viewer #setBtn, body.viewer button.pin { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">練習賽</h1>
+  <button class="primary" id="startBtn">開始比賽</button>
+  <button id="backBtn">回推</button>
+  <button id="addBtn">新增題目</button>
+  <button id="setBtn">設定</button>
+  <a href="/replay"><button>復盤</button></a>
+  <span id="awake" class="awake" title="Safari 有時要先點一下畫面才能開啟">螢幕常亮：點一下畫面開啟</span>
+  <div class="clock"><div class="big" id="remain">--:--:--</div><div class="small" id="elapsed">尚未開始</div></div>
+</header>
+<div class="bar" id="bar"><div></div></div>
+<main>
+  <div>
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <h3 class="stat-h">每題統計</h3>
+    <table class="stats">
+      <thead><tr><th style="text-align:left">題目</th><th>提交</th><th class="v-AC">AC</th><th class="v-WA">WA</th><th class="v-TLE">TLE</th><th class="v-CE">CE</th><th class="v-RE">RE</th><th>其他</th><th>判題中</th><th>解出 / 嘗試人數</th><th>通過率</th></tr></thead>
+      <tbody id="stats"></tbody>
+    </table>
+    <div class="empty" id="empty">先「新增題目」，再按「開始比賽」。有交這些題目的人會自動出現在榜上。</div>
+  </div>
+  <div class="side">
+    <h3>最新提交</h3>
+    <div class="feed" id="feed"></div>
+  </div>
+</main>
+
+<dialog id="addDlg">
+  <h3>題目</h3>
+  <div class="plist" id="plist"></div>
+  <label>題號或直接貼網址（例：<b>20</b> 或 http://120.126.151.220/problem/38/20）<input id="pidIn"></label>
+  <label>題名（可空，會自動抓）<input id="ttlIn"></label>
+  <button class="primary" id="addOk">加入</button> <button onclick="addDlg.close()">關閉</button>
+</dialog>
+
+<dialog id="backDlg">
+  <h3>回推</h3>
+  <p style="color:var(--dim);margin:0 0 8px">比賽已經開始了才開計分板時用。從起點開始把之前的提交全部補回來，罰時從起點算。兩個擇一填。</p>
+  <label>起始 SID（考試第一筆提交，含這筆）<input id="bSid" inputmode="numeric" placeholder="例：182511"></label>
+  <label>或開始時間（今天，HH:MM）<input id="bTime" placeholder="例：13:20"></label>
+  <div id="bMsg" style="color:#ff7b7b;min-height:1.4em"></div>
+  <button class="primary" id="backOk">回推並開始</button> <button onclick="backDlg.close()">取消</button>
+</dialog>
+
+<dialog id="setDlg">
+  <h3>設定</h3>
+  <label>比賽名稱<input id="sTitle"></label>
+  <div style="display:flex;gap:10px">
+    <label style="flex:1">開始時間<input id="sStart" type="time"></label>
+    <label style="flex:1">結束時間<input id="sEnd" type="time"></label>
+  </div>
+  <div id="sInfo" style="color:var(--dim);font-size:13px"></div>
+  <label>每次錯誤罰時（分鐘）<input id="sPen" type="number"></label>
+  <label>封榜（最後幾分鐘，0 = 不封）<input id="sFrz" type="number"></label>
+  <div id="sMsg" style="color:#ff7b7b;min-height:1.4em"></div>
+  <button class="primary" id="setOk">儲存</button> <button onclick="setDlg.close()">取消</button>
+</dialog>
+
+<script>
+let B = null, offset = 0;
+const $ = id => document.getElementById(id);
+// 所有會改東西的操作都走這裡：送 JSON，失敗時拿伺服器的錯誤訊息
+async function api(path, body = {}) {
+  try {
+    const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const data = await r.json();
+    return r.ok ? {ok: true, data} : {ok: false, error: data.error || `失敗（${r.status}）`};
+  } catch (e) { return {ok: false, error: '連不上計分板伺服器'}; }
+}
+const post = async (p, b = {}) => { const r = await api(p, b); if (!r.ok) alert(r.error); await load(); return r; };
+const running = () => B.start && Date.now() + offset < B.end;  // 進行中或排定還沒開始
+const hms = ms => { ms = Math.max(0, ms); const s = Math.floor(ms/1000);
+  return [s/3600|0, (s/60|0)%60, s%60].map(x => String(x).padStart(2,'0')).join(':'); };
+const hm = ms => { const d = new Date(ms); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function load() {
+  try { B = await (await fetch('/api/board')).json(); } catch (e) { return; }  // 伺服器暫時連不上就等下一輪
+  offset = B.now - Date.now();
+  render();
+}
+
+function render() {
+  $('title').textContent = B.title;
+  $('startBtn').textContent = running() ? '結束比賽' : '開始比賽';
+  $('empty').style.display = B.rows.length ? 'none' : '';
+  $('thead').innerHTML = '<tr><th>#</th><th style="text-align:left">選手</th><th>解題</th><th>罰時</th>' +
+    B.problems.map(p => `<th title="${esc(p.title||'')}">${p.label}<br><small>${esc(p.title||p.pid)}</small></th>`).join('') + '</tr>';
+  const pins = new Set(B.pinned || []);
+  const rowHtml = (r, extra='') => {
+    const cells = B.problems.map(p => {
+      const c = r.cells[p.pid];
+      if (!c) return '<td></td>';
+      if (c.ac !== null) return `<td><div class="cell ${c.first?'first':'ac'}">${c.ac}<br><small>${c.tries} 次</small></div></td>`;
+      if (c.pending || c.frozen) return `<td><div class="cell pend">?<br><small>${c.tries}+${c.pending+c.frozen}</small></div></td>`;
+      if (c.tries) return `<td><div class="cell wa">-<br><small>${c.tries} 次</small></div></td>`;
+      return '<td></td>';
+    }).join('');
+    const pinned = pins.has(r.name);
+    const cls = (r.rank <= 3 && r.solved ? `top${r.rank} ` : '') + (pinned ? 'is-pinned ' : '') + extra;
+    const star = `<button class="pin ${pinned ? 'on' : ''}" title="${pinned ? '取消釘選' : '釘選'}" data-name="${esc(r.name)}">${pinned ? '★' : '☆'}</button>`;
+    return `<tr class="${cls}"><td class="rank">${r.rank}</td><td class="name">${star}${esc(r.name)}</td><td><b>${r.solved}</b></td><td>${r.penalty}</td>${cells}</tr>`;
+  };
+  // 釘選的人先列在最上面（保留真正的名次），下面再列完整排名
+  const pinnedRows = B.rows.filter(r => pins.has(r.name));
+  const colspan = 4 + B.problems.length;
+  $('tbody').innerHTML =
+    (pinnedRows.length ? pinnedRows.map(r => rowHtml(r, 'pin-top')).join('') +
+      `<tr class="pin-sep"><td colspan="${colspan}">全部排名</td></tr>` : '') +
+    B.rows.map(r => rowHtml(r)).join('');
+  const lab = Object.fromEntries(B.problems.map(p => [p.pid, p.label]));
+  renderStats();
+  $('feed').innerHTML = B.recent.map(s =>
+    `<div><span>${esc(s.lgn)} · ${lab[s.pid]||s.pid}</span><span class="v-${s.v}">${s.v}</span></div>`).join('') || '<small style="color:var(--dim)">—</small>';
+  tick();
+}
+
+function renderStats() {
+  const K = ['total','AC','WA','TLE','CE','RE','other','pending','frozen'];
+  const sum = Object.fromEntries(K.map(k => [k, 0]));
+  const row = (name, c, cls='') => {
+    const rate = c.total ? Math.round(c.AC / c.total * 100) : 0;
+    const wait = c.pending + c.frozen;
+    return `<tr class="${cls}"><td>${name}</td><td>${c.total}</td><td class="v-AC">${c.AC}</td><td class="v-WA">${c.WA}</td>` +
+      `<td class="v-TLE">${c.TLE}</td><td class="v-CE">${c.CE}</td><td class="v-RE">${c.RE}</td><td>${c.other}</td>` +
+      `<td>${wait}${c.frozen ? ` <small style="color:var(--dim)">(封榜 ${c.frozen})</small>` : ''}</td>` +
+      `<td>${c.solvers ?? ''}${c.tried != null ? ' / ' + c.tried : ''}</td>` +
+      `<td><span class="ratebar"><i style="width:${rate}%"></i></span>${rate}%</td></tr>`;
+  };
+  const rows = B.problems.map(p => {
+    const c = B.stats[p.pid]; K.forEach(k => sum[k] += c[k]);
+    return row(`${p.label}. ${esc(p.title || p.pid)}`, c);
+  });
+  $('stats').innerHTML = rows.join('') + (B.problems.length > 1 ? row('總計', sum, 'sum') : '');
+}
+
+function tick() {
+  if (!B) return;
+  const now = Date.now() + offset;
+  if (!B.start) { $('remain').textContent = '--:--:--'; $('elapsed').textContent = '尚未開始'; $('bar').firstElementChild.style.width = '0'; return; }
+  const total = B.end - B.start, el = now - B.start;
+  if (el < 0) {  // 排定的開始時間還沒到
+    $('remain').textContent = hms(-el); $('elapsed').textContent = `${hm(B.start)} 開始 · ${hm(B.end)} 結束`;
+    $('bar').firstElementChild.style.width = '0'; return;
+  }
+  $('remain').textContent = now >= B.end ? '比賽結束' : hms(B.end - now);
+  $('elapsed').textContent = (B.start_sid ? `從 SID ${B.start_sid} · ` : `${hm(B.start)}–${hm(B.end)} · `) + `已進行 ${hms(Math.min(el, total))}` + (B.freeze_at && now >= B.freeze_at ? ' · 封榜中' : '');
+  $('bar').classList.toggle('frozen', !!(B.freeze_at && now >= B.freeze_at));
+  $('bar').firstElementChild.style.width = Math.min(100, el/total*100) + '%';
+}
+
+// 釘選：表格每 3 秒重畫，所以用事件委派
+$('tbody').addEventListener('click', e => {
+  const b = e.target.closest('button.pin');
+  if (b) post('/api/pin', {name: b.dataset.name});
+});
+
+$('startBtn').onclick = async () => {
+  if (running()) {
+    const later = Date.now() + offset < B.start;
+    if (confirm(later ? '取消排定的比賽？' : '結束比賽？比賽時間會停在現在，榜單和復盤都會留著。')) post('/api/stop');
+    return;
+  }
+  if (!B.problems.length && !confirm('還沒加題目，確定開始？')) return;
+  if (B.start && B.rows.length && !confirm('開新的一場？上一場會自動另存，之後可以在「復盤」看。')) return;
+  const r = await post('/api/start');
+  if (r.ok && r.data.saved) alert(`上一場已存成 ${r.data.saved}`);
+};
+function renderPlist() {
+  $('plist').innerHTML = B.problems.map(p =>
+    `<div><span>${p.label}. #${p.pid} ${esc(p.title||'')}${(p.cids||[]).filter(c=>c).map(c=>` <small style="color:var(--dim)">+考試${c}</small>`).join('')}</span><button onclick="post('/api/remove',{pid:${p.pid}}).then(renderPlist)">刪</button></div>`).join('');
+}
+$('addBtn').onclick = () => { renderPlist(); $('addDlg').showModal(); $('pidIn').focus(); };
+$('addOk').onclick = async () => {
+  const pid = $('pidIn').value; if (!pid) return;
+  const r = await api('/api/add', {pid, title: $('ttlIn').value});
+  if (!r.ok) { alert(r.error); return; }
+  await load();
+  $('pidIn').value = $('ttlIn').value = ''; renderPlist(); $('pidIn').focus();
+};
+$('pidIn').onkeydown = e => { if (e.key === 'Enter') $('addOk').click(); };
+$('backBtn').onclick = () => { $('bMsg').textContent = ''; $('backDlg').showModal(); $('bSid').focus(); };
+$('backOk').onclick = async () => {
+  const sid = $('bSid').value.trim(), time = $('bTime').value.trim();
+  if (!sid && !time) { $('bMsg').textContent = '填 SID 或時間其中一個'; return; }
+  if (B.start && !confirm('比賽進行中，回推會用新的起點重算整個榜，確定？')) return;
+  $('bMsg').style.color = 'var(--dim)'; $('bMsg').textContent = '找起點中…';
+  const r = await api('/api/start', time ? {time} : {sid});
+  $('bMsg').style.color = '#ff7b7b';
+  if (!r.ok) { $('bMsg').textContent = r.error; return; }
+  $('bSid').value = $('bTime').value = ''; $('backDlg').close(); load();
+};
+$('setBtn').onclick = () => {
+  const s = B.settings; $('sTitle').value = s.title;
+  $('sStart').value = B.start ? hm(B.start) : ''; $('sEnd').value = B.end ? hm(B.end) : ''; $('sMsg').textContent = '';
+  showDur();
+  $('sPen').value = s.penalty_min; $('sFrz').value = s.freeze_min; $('setDlg').showModal();
+};
+function showDur() {
+  const [a, b] = [$('sStart').value, $('sEnd').value];
+  if (!a || !b) { $('sInfo').textContent = a ? '' : '開始時間可以設未來，時間到自動開始；改開始時間會從新起點重抓。'; return; }
+  let d = (b.split(':')[0]*60 + +b.split(':')[1]) - (a.split(':')[0]*60 + +a.split(':')[1]);
+  if (d <= 0) d += 1440;
+  $('sInfo').textContent = `共 ${Math.floor(d/60)} 小時 ${d%60} 分`;
+}
+$('sStart').oninput = $('sEnd').oninput = showDur;
+$('setOk').onclick = async () => {
+  const a = $('sStart').value, b = $('sEnd').value;
+  if (b && !a) { $('sMsg').textContent = '要先填開始時間'; return; }
+  if (B.start && a && a !== hm(B.start) && !confirm(`開始時間改成 ${a}，整個榜會從新起點重算，確定？`)) return;
+  // 開始時間沒改就不送，免得重抓整個榜
+  const r = await api('/api/settings', {title: $('sTitle').value, start_time: B.start && a === hm(B.start) ? '' : a,
+    end_time: b, penalty_min: $('sPen').value, freeze_min: $('sFrz').value});
+  if (!r.ok) { $('sMsg').textContent = r.error; return; }
+  $('setDlg').close(); load();
+};
+
+// 不讓螢幕睡眠／進螢幕保護（Screen Wake Lock，Safari 16.4+、Chrome 都支援）。
+// 切到別的分頁或縮小視窗時瀏覽器會自動放掉，回來時再要一次；Safari 有時要使用者點過畫面才給。
+let wakeLock = null;
+async function keepAwake() {
+  if (!('wakeLock' in navigator)) { $('awake').textContent = '這個瀏覽器不支援螢幕常亮'; return; }
+  if (wakeLock || document.visibilityState !== 'visible') return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; showAwake(); });
+  } catch (e) { console.log('wake lock:', e.message); }
+  showAwake();
+}
+function showAwake() {
+  $('awake').classList.toggle('on', !!wakeLock);
+  $('awake').textContent = wakeLock ? '● 螢幕常亮' : '螢幕常亮：點一下畫面開啟';
+}
+document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('click', keepAwake);
+keepAwake();
+
+// 別台電腦開的只能看，不顯示操作按鈕
+fetch('/api/me').then(r => r.json()).then(me => document.body.classList.toggle('viewer', !me.control)).catch(() => {});
+load(); setInterval(load, 3000); setInterval(tick, 1000);
+</script>
+</body>
+</html>

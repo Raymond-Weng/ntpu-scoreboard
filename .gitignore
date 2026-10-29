@@ -1,0 +1,8 @@
+data/
+contest*.json
+*.tmp
+__pycache__/
+.idea/
+.vscode/
+.claude/
+.DS_Store

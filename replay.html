@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>比賽復盤</title>
+<style>
+  :root { --bg:#0f1419; --panel:#182028; --line:#2a3440; --fg:#e6edf3; --dim:#8b98a5;
+          --ac:#1f9d55; --first:#0b6b3a; --wa:#b03a3a; --pend:#b58a00; --accent:#4ea1ff;
+          --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --muted-line:#34404d;
+          --v-ac:#3fe08a; --v-bad:#ff7b7b; --v-tle:#ffb454; --v-ce:#6b7785; --v-pend:#d4a72c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,"PingFang TC","Noto Sans TC",sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  h1 { margin:0; font-size:22px; }
+  h1 small { color:var(--dim); font-size:14px; font-weight:400; margin-left:6px; }
+  a { color:var(--accent); }
+  button, select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  button:hover, select:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; min-width:84px; }
+  .right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .controls { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; flex-wrap:wrap; }
+  .controls input[type=range] { flex:1; min-width:200px; accent-color:var(--accent); }
+  .tlabel { font-variant-numeric:tabular-nums; min-width:150px; }
+  .tlabel b { font-size:20px; }
+  .tlabel span { color:var(--dim); font-size:13px; margin-left:6px; }
+  .hint { color:var(--dim); font-size:12px; }
+  main { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; padding:16px 20px; }
+  @media (max-width:980px) { main { grid-template-columns:minmax(0,1fr); } }
+  .wide { grid-column:1 / -1; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; }
+  .card h3 { margin:0 0 8px; font-size:14px; color:var(--dim); font-weight:500; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .scroll { overflow-x:auto; }
+  /* 排名表自己捲動，下面的圖表不用滑很遠 */
+  .board-box { overflow:auto; max-height:max(360px, calc(100vh - 230px)); }
+  .board-box thead th { position:sticky; top:0; background:var(--panel); z-index:1; }
+  .board-box td { padding:2px 6px; }
+  .board-box td.name { font-size:14px; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { border-bottom:1px solid var(--line); padding:5px 7px; text-align:center; }
+  th { color:var(--dim); font-weight:500; font-size:13px; }
+  td.name { text-align:left; font-weight:600; white-space:nowrap; }
+  td.rank { width:40px; color:var(--dim); }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover td { background:rgba(255,255,255,.03); }
+  tr.sel td { background:rgba(78,161,255,.14) !important; }
+  tr.pinned td.name { color:#ffd700; }
+  .delta { font-size:12px; width:44px; }
+  .up { color:var(--v-ac); } .down { color:var(--v-bad); }
+  .cell { border-radius:4px; padding:2px 0; min-width:54px; font-size:13px; line-height:1.25; white-space:nowrap; }
+  .cell.ac { background:var(--ac); } .cell.first { background:var(--first); outline:2px solid #3fe08a; }
+  .cell.wa { background:var(--wa); } .cell.pend { background:var(--pend); color:#000; }
+  .cell small { opacity:.75; font-size:11px; }
+  .events div { display:flex; gap:8px; font-size:13px; padding:5px 4px; border-bottom:1px dashed var(--line); cursor:pointer; border-radius:4px; }
+  .events div:hover { background:rgba(255,255,255,.04); }
+  .events div.future { opacity:.35; }
+  .events .m { color:var(--dim); width:44px; flex:none; font-variant-numeric:tabular-nums; }
+  .events-wrap { max-height:420px; overflow-y:auto; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; color:var(--dim); font-weight:400; }
+  .legend i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+  .legend i.dot { width:9px; height:9px; border-radius:50%; }
+  svg text { fill:var(--dim); font-size:11px; }
+  .tip { position:fixed; pointer-events:none; background:#0b0f14; border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:13px; z-index:20; display:none; white-space:nowrap; }
+  .tip b { color:var(--fg); }
+  .user-sum { display:flex; gap:16px; margin:4px 0 10px; flex-wrap:wrap; }
+  .user-sum div { font-size:13px; color:var(--dim); }
+  .user-sum b { display:block; font-size:20px; color:var(--fg); font-variant-numeric:tabular-nums; }
+  .subs td { font-size:13px; padding:4px 6px; }
+  .subs tr { cursor:pointer; }
+  .subs tr.ignored td { opacity:.4; }
+  .subs tr.future td { opacity:.25; }
+  .v-AC { color:var(--v-ac); } .v-WA,.v-RE,.v-MLE,.v-OLE,.v-PE { color:var(--v-bad); } .v-TLE { color:var(--v-tle); } .v-CE { color:var(--v-ce); }
+  .empty { color:var(--dim); padding:30px; text-align:center; }
+  .note { color:var(--dim); font-size:12px; }
+  dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:10px; width:min(560px, calc(100vw - 32px)); padding:16px; }
+  dialog::backdrop { background:rgba(0,0,0,.55); }
+  dialog h3 { margin:0 0 4px; }
+  .jlist { max-height:34vh; overflow-y:auto; margin:6px 0 4px; }
+  .jlist div.cur { background:rgba(78,161,255,.12); border-radius:4px; }
+  .jlist .tag { font-size:11px; color:var(--dim); border:1px solid var(--line); border-radius:4px; padding:0 5px; margin-left:6px; }
+  .jlist button.danger { color:var(--v-bad); }
+  .jlist button.danger.armed { background:var(--wa); color:#fff; border-color:var(--wa); }
+  dialog h4 { margin:14px 0 2px; font-size:14px; display:flex; align-items:center; gap:8px; }
+  dialog h4 button { margin-left:auto; padding:3px 10px; font-size:13px; font-weight:400; }
+  .jlist div { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid var(--line); }
+  .jlist .c { color:var(--dim); width:28px; font-variant-numeric:tabular-nums; }
+  .jlist .t { flex:1; min-width:0; }
+  .jlist .t small { display:block; color:var(--dim); }
+  .jlist button { padding:4px 10px; font-size:13px; }
+  body.viewer #snapBtn, body.viewer #flist button[data-del], body.viewer #jlist button { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">比賽復盤</h1>
+  <div class="right">
+    <button id="menuBtn" title="開啟、刪除、匯入比賽">📂 比賽 ▾</button>
+    <a href="/"><button>回計分板</button></a>
+  </div>
+</header>
+<div class="controls">
+  <button class="primary" id="play">▶ 播放</button>
+  <select id="speed" title="播放速度">
+    <option value="1">1 分/格</option><option value="2" selected>2 分/格</option><option value="5">5 分/格</option>
+  </select>
+  <input type="range" id="slider" min="0" max="180" value="180">
+  <div class="tlabel" id="tlabel"></div>
+  <span class="hint">← → 一分鐘・空白鍵播放</span>
+</div>
+<div id="noData" class="empty" style="display:none"></div>
+<main id="main">
+  <div class="card">
+    <h3>當時排名 <span class="note">格子是「AC 分鐘 (嘗試次數)」；封榜後的提交也算進來；點一個人看他的過程</span></h3>
+    <div class="board-box"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:16px; min-width:0">
+    <div class="card" id="userCard" style="display:none"></div>
+    <div class="card">
+      <h3>關鍵時刻 <span class="note">點一下跳到那個時間</span></h3>
+      <div class="events-wrap"><div class="events" id="events"></div></div>
+    </div>
+  </div>
+  <div class="card wide">
+    <h3>排名變化 <span class="legend" id="rankLegend"></span></h3>
+    <div id="rankChart"></div>
+  </div>
+  <div class="card wide">
+    <h3>每題提交時間軸 <span class="legend">
+      <span><i class="dot" style="background:var(--v-ac)"></i>AC</span>
+      <span><i class="dot" style="background:var(--v-bad)"></i>WA / RE / 其他</span>
+      <span><i class="dot" style="background:var(--v-tle)"></i>TLE</span>
+      <span><i class="dot" style="background:var(--v-ce)"></i>CE</span>
+      <span><i class="dot" style="background:var(--v-pend)"></i>判題中</span>
+      <span>◎ 首殺</span></span></h3>
+    <div id="probChart"></div>
+  </div>
+</main>
+<div class="tip" id="tip"></div>
+<dialog id="menuDlg">
+  <h3>比賽</h3>
+  <h4>已存的比賽 <button id="snapBtn" title="把目前這場另存一份，之後還能復盤">另存目前這場</button></h4>
+  <div class="jlist" id="flist"></div>
+  <h4>從 Judge 匯入考試</h4>
+  <div class="note">把整場考試的提交抓下來（每題 20 罰時），存進 data/。</div>
+  <div class="jlist" id="jlist"><p class="empty">讀取中…</p></div>
+  <div id="impMsg" class="note" style="min-height:18px"></div>
+  <button onclick="menuDlg.close()">關閉</button>
+</dialog>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const AC = 7, CE = 1, PENDING = new Set([0, 8]), TLE = 5;
+const HL = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)'];
+let D, SUBS, NAMES, DUR, STEP, LABEL, FINAL, FIRSTMIN, FIRSTSIDS, T, sel = null, timer = null;
+const RCACHE = new Map();
+
+// ---------- 計算 ----------
+function compute(upTo) {
+  // 跟 scoreboard.py 一樣的 ICPC 規則：AC 前的錯誤每次罰 penalty_min，CE 不罰，AC 後的不算
+  // 整場有交過的人一開始就全部列出來（還沒交的格子空白、並列第一），表格不會越長越長
+  const teams = new Map(NAMES.map(n => [n, {name: n, cells: {}}]));
+  for (const s of SUBS) {
+    if (s.m > upTo) break;  // SUBS 照時間排好了
+    const t = teams.get(s.lgn);
+    const c = t.cells[s.pid] ||= {tries: 0, ac: null, pending: 0};
+    if (c.ac !== null) continue;
+    if (PENDING.has(s.res)) c.pending++;
+    else if (s.res === CE) continue;
+    else if (s.res === AC) { c.tries++; c.ac = s.m; }
+    else c.tries++;
+  }
+  const rows = [...teams.values()].map(t => {
+    let solved = 0, pen = 0, last = 0;
+    for (const c of Object.values(t.cells)) if (c.ac !== null) {
+      solved++; pen += c.ac + (c.tries - 1) * D.penalty_min; last = Math.max(last, c.ac);
+    }
+    return {...t, solved, penalty: pen, last};
+  });
+  rows.sort((a, b) => b.solved - a.solved || a.penalty - b.penalty || a.last - b.last || (a.name < b.name ? -1 : 1));
+  rows.forEach((r, i) => {
+    const p = rows[i - 1];
+    r.rank = p && p.solved === r.solved && p.penalty === r.penalty ? p.rank : i + 1;
+  });
+  return rows;
+}
+
+// 第 m 分鐘的排名：學號 -> 那一列。算過的存起來
+function rankAt(m) {
+  m = Math.max(0, Math.min(DUR, m));
+  if (!RCACHE.has(m)) RCACHE.set(m, new Map(compute(m).map(r => [r.name, r])));
+  return RCACHE.get(m);
+}
+
+function prepare() {
+  const start = D.start;
+  DUR = Math.max(1, D.duration_min);
+  STEP = Math.max(1, Math.ceil(DUR / 600));  // 很長的比賽（好幾天）圖表和事件改成每 STEP 分鐘取一點
+  const end = start + DUR * 60000;
+  LABEL = {};
+  D.problems.forEach(p => { LABEL[p.pid] = p.label; });
+  SUBS = D.subs.filter(([, ts]) => ts >= start && ts <= end)
+    .map(([sid, ts, lgn, pid, res]) => ({sid, ts, lgn, pid, res, m: Math.floor((ts - start) / 60000)}))
+    .sort((a, b) => a.ts - b.ts || a.sid - b.sid);
+  NAMES = [...new Set(SUBS.map(s => s.lgn))];
+  RCACHE.clear();
+  FINAL = compute(DUR);
+  // 首殺：那題最早 AC 的那一分鐘，同一分鐘的都算（跟計分板一樣）
+  FIRSTMIN = {};
+  for (const r of FINAL) for (const [pid, c] of Object.entries(r.cells))
+    if (c.ac !== null && !(c.ac >= FIRSTMIN[pid])) FIRSTMIN[pid] = c.ac;
+  FIRSTSIDS = new Set();
+  const got = new Set();
+  for (const s of SUBS) {
+    const k = s.lgn + ':' + s.pid;
+    if (s.res !== AC || got.has(k)) continue;
+    got.add(k);
+    if (FIRSTMIN[s.pid] === s.m) FIRSTSIDS.add(s.sid);
+  }
+}
+
+function keyEvents() {
+  const ev = [];
+  const firstAcs = SUBS.filter(s => FIRSTSIDS.has(s.sid));
+  if (SUBS.length) ev.push({m: SUBS[0].m, html: `第一筆提交：<b>${esc(SUBS[0].lgn)}</b>（${LABEL[SUBS[0].pid]}）`, who: SUBS[0].lgn});
+  firstAcs.forEach((s, i) => ev.push({m: s.m, who: s.lgn,
+    html: `${i === 0 ? '全場第一個 AC・' : ''}<b>${LABEL[s.pid]}</b> 首殺：<b>${esc(s.lgn)}</b>`}));
+  // 誰坐上第一名
+  let leader = null;
+  for (let m = 0; m <= DUR; m += STEP) {
+    const top = [...rankAt(m).values()].find(r => r.rank === 1 && r.solved > 0);
+    if (top && top.name !== leader) {
+      ev.push({m, who: top.name, html: `<b>${esc(top.name)}</b> 登上第一（${top.solved} 題 / ${top.penalty}）`});
+      leader = top.name;
+    }
+  }
+  // 第一個全解的人
+  const n = D.problems.length;
+  for (let m = 0; m <= DUR; m += STEP) {
+    const all = [...rankAt(m).values()].find(r => r.solved === n && n > 0);
+    if (all) { ev.push({m, who: all.name, html: `<b>${esc(all.name)}</b> 全部解完 🎉`}); break; }
+  }
+  // 最後五分鐘的 AC
+  SUBS.filter(s => s.res === AC && s.m >= DUR - 5).forEach(s => {
+    const c = rankAt(DUR).get(s.lgn)?.cells[s.pid];
+    if (c && c.ac === s.m) ev.push({m: s.m, who: s.lgn, html: `最後關頭：<b>${esc(s.lgn)}</b> 解出 ${LABEL[s.pid]}`});
+  });
+  if (D.freeze_min) ev.push({m: DUR - D.freeze_min, html: '開始封榜（復盤這裡看得到封榜後的提交）'});
+  return ev.sort((a, b) => a.m - b.m);
+}
+
+// ---------- 畫面 ----------
+const hhmm = m => new Date(D.start + m * 60000).toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit', hour12: false});
+const verdict = r => D.verdicts[r] ?? String(r);
+const vColor = r => r === AC ? 'var(--v-ac)' : r === CE ? 'var(--v-ce)' : r === TLE ? 'var(--v-tle)' : PENDING.has(r) ? 'var(--v-pend)' : 'var(--v-bad)';
+
+function renderBoard() {
+  const rows = [...rankAt(T).values()];
+  const before = rankAt(Math.max(0, T - 10));
+  $('thead').innerHTML = `<tr><th>#</th><th title="跟 10 分鐘前比">10分</th><th style="text-align:left">學號</th><th>題數</th><th>罰時</th>${
+    D.problems.map(p => `<th title="${esc(p.title || '')}">${p.label}</th>`).join('')}</tr>`;
+  if (!rows.length) { $('tbody').innerHTML = `<tr><td colspan="${5 + D.problems.length}" class="empty">這時候還沒有人交</td></tr>`; return; }
+  $('tbody').innerHTML = rows.map(r => {
+    const b = before.get(r.name);
+    let d = '';
+    // 10 分鐘前一題都還沒解的人是「並列」不是真的名次，不算變化
+    if (b && b.solved && b.rank !== r.rank) d = b.rank > r.rank ? `<span class="up">▲${b.rank - r.rank}</span>` : `<span class="down">▼${r.rank - b.rank}</span>`;
+    const cells = D.problems.map(p => {
+      const c = r.cells[p.pid];
+      if (!c) return '<td></td>';
+      if (c.ac !== null) {
+        const first = FIRSTMIN[p.pid] === c.ac;
+        return `<td><div class="cell ${first ? 'first' : 'ac'}">${c.ac}<small> (${c.tries})</small></div></td>`;
+      }
+      if (c.pending) return `<td><div class="cell pend">?<small> (${c.tries}+${c.pending})</small></div></td>`;
+      return c.tries ? `<td><div class="cell wa">-${c.tries}</div></td>` : '<td></td>';
+    }).join('');
+    const cls = [r.name === sel ? 'sel' : '', D.pinned.includes(r.name) ? 'pinned' : ''].join(' ');
+    return `<tr class="${cls}" data-name="${esc(r.name)}"><td class="rank">${r.rank}</td><td class="delta">${d}</td><td class="name">${esc(r.name)}</td><td>${r.solved}</td><td>${r.penalty}</td>${cells}</tr>`;
+  }).join('');
+}
+
+function renderEvents() {
+  $('events').innerHTML = EVENTS.map((e, i) =>
+    `<div class="${e.m > T ? 'future' : ''}" data-i="${i}"><span class="m">${e.m} 分</span><span>${e.html}</span></div>`).join('')
+    || '<p class="empty">沒有資料</p>';
+}
+
+function renderUser() {
+  const card = $('userCard');
+  if (!sel) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const now = rankAt(T).get(sel), fin = rankAt(DUR).get(sel);
+  const mine = SUBS.filter(s => s.lgn === sel);
+  // 標出每筆提交有沒有算進罰時（AC 之後的、CE 不算）
+  const acAt = {};
+  const rowsHtml = mine.map(s => {
+    let note = '', cls = '';
+    if (acAt[s.pid] !== undefined) { note = 'AC 後，不算'; cls = 'ignored'; }
+    else if (s.res === AC) { acAt[s.pid] = s.m; note = '解出'; }
+    else if (s.res === CE) note = 'CE 不罰';
+    else if (PENDING.has(s.res)) note = '判題中';
+    else note = `+${D.penalty_min}`;
+    if (s.m > T) cls += ' future';
+    return `<tr class="${cls}" data-m="${s.m}"><td>${s.m} 分</td><td>${LABEL[s.pid]}</td><td class="v-${verdict(s.res)}">${verdict(s.res)}</td><td class="note">${note}</td></tr>`;
+  }).join('');
+  let best = Infinity;
+  for (let m = 0; m <= DUR; m += STEP) best = Math.min(best, rankAt(m).get(sel)?.rank ?? Infinity);
+  card.innerHTML = `<h3><b style="color:var(--fg);font-size:16px">${esc(sel)}</b><button id="closeUser" style="margin-left:auto;padding:2px 10px">✕</button></h3>
+    <div class="user-sum">
+      <div>此刻<b>#${now ? now.rank : '-'}</b></div>
+      <div>最後<b>#${fin ? fin.rank : '-'}</b></div>
+      <div>最佳<b>#${isFinite(best) ? best : '-'}</b></div>
+      <div>題數 / 罰時<b>${fin ? fin.solved : 0} / ${fin ? fin.penalty : 0}</b></div>
+      <div>提交<b>${mine.length}</b></div>
+    </div>
+    <div class="events-wrap" style="max-height:300px"><table class="subs"><thead><tr><th>時間</th><th>題</th><th>結果</th><th>罰時</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+  $('closeUser').onclick = () => { sel = null; update(); };
+}
+
+// 排名變化：最後前 15 名畫灰線，前 3 名和選到的人上色
+function renderRankChart() {
+  const box = $('rankChart');
+  const W = Math.max(320, box.clientWidth), H = 340, L = 34, R = 110, Tp = 10, Bt = 26;
+  const plotted = FINAL.slice(0, 15).map(r => r.name);
+  if (sel && !plotted.includes(sel)) plotted.push(sel);
+  const hl = FINAL.slice(0, 3).map(r => r.name);
+  if (sel && !hl.includes(sel)) hl.push(sel);
+  const maxRank = Math.max(15, ...plotted.map(n => rankAt(DUR).get(n)?.rank || 0));
+  const yMax = Math.min(maxRank, 25);
+  const x = m => L + (W - L - R) * m / DUR;
+  const y = r => Tp + (H - Tp - Bt) * (Math.min(r, yMax) - 1) / Math.max(1, yMax - 1);
+  const path = name => {
+    let d = '', prev = null;
+    for (let m = 0; m <= DUR; m += STEP) {
+      const r = rankAt(m).get(name)?.rank;
+      if (r === undefined) { prev = null; continue; }
+      if (prev === null) d += `M${x(m)},${y(r)}`;
+      else if (r !== prev) d += `H${x(m)}V${y(r)}`;
+      prev = r;
+    }
+    return d + (prev !== null ? `H${x(DUR)}` : '');
+  };
+  let g = '';
+  for (const r of new Set([1, 5, 10, 15, 20, 25, yMax].filter(r => r <= yMax))) {
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(r)}" y2="${y(r)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(r) + 4}" text-anchor="end">${r}</text>`;
+  }
+  for (let m = 0; m <= DUR; m += 30) g += `<text x="${x(m)}" y="${H - 8}" text-anchor="middle">${m}</text>`;
+  if (D.freeze_min) g += `<line x1="${x(DUR - D.freeze_min)}" x2="${x(DUR - D.freeze_min)}" y1="${Tp}" y2="${H - Bt}" stroke="#7aa7ff" stroke-dasharray="3 4"/><text x="${x(DUR - D.freeze_min) + 4}" y="${Tp + 10}" text-anchor="start">封榜</text>`;
+  const gray = plotted.filter(n => !hl.includes(n)).map(n =>
+    `<path d="${path(n)}" fill="none" stroke="var(--muted-line)" stroke-width="1.5"/>`).join('');
+  let labels = [];
+  const color = n => HL[hl.indexOf(n)];
+  const lines = hl.map(n => {
+    const r = rankAt(DUR).get(n)?.rank;
+    if (r !== undefined) labels.push({n, y: y(r)});
+    return `<path d="${path(n)}" fill="none" stroke="${color(n)}" stroke-width="${n === sel ? 3 : 2}" stroke-linejoin="round"/>`;
+  }).join('');
+  // 右邊的名字不要疊在一起
+  labels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labels.length; i++) labels[i].y = Math.max(labels[i].y, labels[i - 1].y + 14);
+  const lab = labels.map(l => `<text x="${W - R + 8}" y="${l.y + 4}" style="fill:var(--fg)">${esc(l.n)}</text>`).join('');
+  box.innerHTML = `<svg width="${W}" height="${H}" id="rankSvg">${g}${gray}${lines}${lab}
+    <line id="nowLine" x1="${x(T)}" x2="${x(T)}" y1="${Tp}" y2="${H - Bt}" stroke="var(--accent)" stroke-width="1.5"/>
+    <line id="hoverLine" y1="${Tp}" y2="${H - Bt}" stroke="var(--dim)" stroke-width="1" style="display:none"/>
+    <rect x="${L}" y="0" width="${W - L - R}" height="${H - Bt}" fill="transparent" id="rankHit" style="cursor:crosshair"/></svg>`;
+  $('rankLegend').innerHTML = hl.map(n => `<span><i style="background:${color(n)}"></i>${esc(n)}${n === sel && !FINAL.slice(0, 3).some(r => r.name === n) ? '（選到的）' : ''}</span>`).join('')
+    + `<span><i style="background:var(--muted-line)"></i>其他前 15 名</span><span>橫軸：分鐘</span>`;
+  const hit = $('rankHit');
+  const at = ev => {
+    const b = hit.getBoundingClientRect();
+    const m = Math.round((ev.clientX - b.left) / b.width * DUR);
+    const r = Math.max(1, Math.round(1 + (ev.clientY - b.top - Tp) / (H - Tp - Bt) * (yMax - 1)));
+    const cand = plotted.map(n => rankAt(Math.max(0, Math.min(DUR, m))).get(n)).filter(Boolean);
+    const near = cand.sort((a, b) => Math.abs(a.rank - r) - Math.abs(b.rank - r))[0];
+    return {m: Math.max(0, Math.min(DUR, m)), near};
+  };
+  hit.onmousemove = ev => {
+    const {m, near} = at(ev);
+    const hv = $('hoverLine'); hv.style.display = ''; hv.setAttribute('x1', x(m)); hv.setAttribute('x2', x(m));
+    showTip(ev, `${m} 分（${hhmm(m)}）<br>` + (near ? `<b>#${near.rank} ${esc(near.name)}</b>　${near.solved} 題 / ${near.penalty}` : '沒人'));
+  };
+  hit.onmouseleave = () => { $('hoverLine').style.display = 'none'; hideTip(); };
+  hit.onclick = ev => { const {m, near} = at(ev); if (near) sel = near.name; setT(m); };
+}
+
+// 每題時間軸：一題一排，每個點是一筆提交
+function renderProbChart() {
+  const box = $('probChart');
+  const W = Math.max(320, box.clientWidth), lane = 46, L = 150, R = 20, Tp = 6, Bt = 24;
+  const H = Tp + lane * D.problems.length + Bt;
+  const x = m => L + (W - L - R) * m / DUR;
+  let g = '';
+  for (let m = 0; m <= DUR; m += 30) g += `<line x1="${x(m)}" x2="${x(m)}" y1="${Tp}" y2="${H - Bt}" stroke="var(--line)"/><text x="${x(m)}" y="${H - 8}" text-anchor="middle">${m}</text>`;
+  const solvedNow = pid => [...rankAt(T).values()].filter(r => r.cells[pid]?.ac != null).length;
+  D.problems.forEach((p, i) => {
+    const y0 = Tp + lane * i;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y0 + lane}" y2="${y0 + lane}" stroke="var(--line)"/>`;
+    g += `<text x="8" y="${y0 + 20}" style="fill:var(--fg);font-size:13px;font-weight:600">${p.label}. ${esc((p.title || '').slice(0, 9))}</text>`;
+    g += `<text x="8" y="${y0 + 36}">此刻 ${solvedNow(p.pid)} 人解出</text>`;
+  });
+  // 同一分鐘的點往上疊，避免蓋住
+  const stack = {};
+  const dots = SUBS.map(s => {
+    const i = D.problems.findIndex(p => p.pid === s.pid);
+    const k = s.pid + ':' + s.m;
+    const n = stack[k] = (stack[k] || 0) + 1;
+    const cy = Tp + lane * i + lane - 6 - ((n - 1) % 5) * 8;
+    const first = FIRSTSIDS.has(s.sid);
+    const op = s.m > T ? 0.15 : (sel && s.lgn !== sel ? 0.35 : 1);
+    return `<circle cx="${x(s.m + 0.5)}" cy="${cy}" r="${first ? 5 : 4}" fill="${vColor(s.res)}" stroke="${first ? '#fff' : 'var(--panel)'}" stroke-width="${first ? 2 : 1}" opacity="${op}" data-sid="${s.sid}"/>`;
+  }).join('');
+  box.innerHTML = `<svg width="${W}" height="${H}" id="probSvg">${g}${dots}
+    <line x1="${x(T)}" x2="${x(T)}" y1="${Tp}" y2="${H - Bt}" stroke="var(--accent)" stroke-width="1.5"/></svg>`;
+  const bySid = new Map(SUBS.map(s => [String(s.sid), s]));
+  const svg = $('probSvg');
+  svg.onmousemove = ev => {
+    const s = bySid.get(ev.target.dataset?.sid);
+    if (!s) return hideTip();
+    showTip(ev, `<b>${esc(s.lgn)}</b>　${LABEL[s.pid]}　<span class="v-${verdict(s.res)}">${verdict(s.res)}</span><br>${s.m} 分（${hhmm(s.m)}）${FIRSTSIDS.has(s.sid) ? '　首殺' : ''}`);
+  };
+  svg.onmouseleave = hideTip;
+  svg.onclick = ev => { const s = bySid.get(ev.target.dataset?.sid); if (s) { sel = s.lgn; setT(s.m); } };
+}
+
+function showTip(ev, html) {
+  const t = $('tip'); t.innerHTML = html; t.style.display = 'block';
+  const w = t.offsetWidth;
+  t.style.left = Math.min(ev.clientX + 14, innerWidth - w - 8) + 'px';
+  t.style.top = (ev.clientY + 14) + 'px';
+}
+function hideTip() { $('tip').style.display = 'none'; }
+
+let shownSel = null;
+function update() {
+  $('slider').value = T;
+  $('tlabel').innerHTML = `<b>${T}</b> 分<span>${hhmm(T)}・共 ${DUR} 分</span>`;
+  renderBoard(); renderEvents(); renderUser(); renderRankChart(); renderProbChart();
+  if (sel !== shownSel) {  // 從圖表或關鍵時刻選到人時，把他捲進排名表的畫面裡
+    shownSel = sel;
+    const tr = sel && [...$('tbody').rows].find(r => r.dataset.name === sel);
+    if (tr) {  // 只捲表格自己，不要動整頁
+      const box = tr.closest('.board-box'), head = box.querySelector('thead').offsetHeight;
+      const top = tr.offsetTop - head, bottom = tr.offsetTop + tr.offsetHeight;
+      if (top < box.scrollTop) box.scrollTop = top;
+      else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight;
+    }
+  }
+  const h = new URLSearchParams();
+  if (FILE) h.set('f', FILE);
+  if (sel) h.set('u', sel);
+  h.set('t', T);
+  history.replaceState(null, '', '#' + h);
+}
+function setT(m) { T = Math.max(0, Math.min(DUR, m)); update(); }
+
+function play() {
+  if (timer) { clearInterval(timer); timer = null; $('play').textContent = '▶ 播放'; return; }
+  if (T >= DUR) T = 0;
+  $('play').textContent = '⏸ 暫停';
+  timer = setInterval(() => {
+    setT(T + +$('speed').value);
+    if (T >= DUR) play();
+  }, 300);
+}
+
+let FILE = '', EVENTS = [];
+async function open(file, keep = {}) {
+  if (timer) play();
+  FILE = file;
+  const r = await fetch('/api/replay?f=' + encodeURIComponent(file));
+  D = await r.json();
+  const ok = r.ok && D.start;
+  $('main').style.display = ok ? '' : 'none';
+  $('noData').style.display = ok ? 'none' : '';
+  if (!ok) {
+    $('title').textContent = '比賽復盤';
+    $('noData').textContent = D.error || '這場比賽還沒開始，沒東西可以復盤。按右上角「📂 比賽」開別場或從 Judge 匯入。';
+    if (!r.ok) history.replaceState(null, '', '#');
+    return;
+  }
+  $('title').innerHTML = `${esc(D.title)}<small>復盤・${new Date(D.start).toLocaleDateString('zh-TW')}・${D.subs.length} 筆提交</small>`;
+  prepare();
+  EVENTS = keyEvents();
+  $('slider').max = DUR;
+  sel = keep.u && rankAt(DUR).has(keep.u) ? keep.u : null;
+  T = keep.t != null && !isNaN(keep.t) ? Math.max(0, Math.min(DUR, keep.t)) : Math.max(0, Math.min(DUR, Math.floor((Date.now() - D.start) / 60000)));
+  update();
+}
+
+async function init() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const f = h.get('f') || '';
+  await open(f, {u: h.get('u'), t: h.has('t') ? +h.get('t') : null});
+}
+
+const fmt = ms => new Date(ms).toLocaleString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false});
+const day = ms => ms ? new Date(ms).toLocaleDateString('zh-TW') : '未開始';
+const msg = t => { $('impMsg').textContent = t; };
+const postJson = (path, body = {}) => fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+
+async function renderFiles() {
+  const list = await (await fetch('/api/contests')).json();
+  $('flist').innerHTML = list.map(c => `<div class="${c.file === FILE ? 'cur' : ''}">
+    <span class="t">${esc(c.title)}${c.current ? '<span class="tag">進行中的這場</span>' : ''}${c.judge_cid ? `<span class="tag">Judge #${c.judge_cid}</span>` : ''}
+      <small>${day(c.start)}・${c.subs} 筆提交${c.file ? '・' + esc(c.file) : ''}</small></span>
+    ${c.file === FILE ? '<span class="note">正在看</span>' : `<button data-open="${esc(c.file)}">開啟</button>`}
+    ${c.current ? '' : `<button class="danger" data-del="${esc(c.file)}">刪除</button>`}</div>`).join('');
+}
+
+async function renderJudge() {
+  const r = await fetch('/api/judge_contests'), list = await r.json();
+  if (!r.ok) { $('jlist').innerHTML = `<p class="empty">${esc(list.error)}</p>`; return; }
+  $('jlist').innerHTML = list.map(c => `<div><span class="c">${c.cid}</span><span class="t">${esc(c.title)}<small>${fmt(c.start)} ~ ${fmt(c.end).slice(-5)}</small></span>${
+    c.start > Date.now() ? '<span class="note">還沒開始</span>'
+    : `<button data-cid="${c.cid}" class="${c.imported ? '' : 'primary'}">${c.imported ? '重新匯入' : '匯入'}</button>`}</div>`).join('');
+}
+
+$('menuBtn').onclick = () => {
+  menuDlg.showModal(); msg('');
+  renderFiles(); renderJudge();
+};
+
+// 開啟 / 刪除（刪除要按兩次）
+$('flist').onclick = async e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if ('open' in b.dataset) { menuDlg.close(); return open(b.dataset.open); }
+  if (!b.classList.contains('armed')) {
+    $('flist').querySelectorAll('.armed').forEach(x => { x.classList.remove('armed'); x.textContent = '刪除'; });
+    b.classList.add('armed'); b.textContent = '確定刪除？';
+    return;
+  }
+  const r = await postJson('/api/delete', {file: b.dataset.del});
+  if (!r.ok) return msg((await r.json()).error);
+  msg(`已刪除 ${b.dataset.del}`);
+  if (b.dataset.del === FILE) open('');
+  renderFiles(); renderJudge();
+};
+
+$('snapBtn').onclick = async () => {
+  const r = await postJson('/api/snapshot'), d = await r.json();
+  if (!r.ok) return msg(d.error);
+  msg(`已存成 ${d.file}`);
+  renderFiles();
+};
+
+$('jlist').onclick = async e => {
+  const b = e.target.closest('button[data-cid]');
+  if (!b) return;
+  b.disabled = true; b.textContent = '匯入中…';
+  msg('一頁一頁抓提交，提交多的考試要等十幾秒');
+  const r = await postJson('/api/import', {cid: +b.dataset.cid});
+  const d = await r.json();
+  if (!r.ok) { msg(d.error); b.disabled = false; b.textContent = '匯入'; return; }
+  menuDlg.close();
+  open(d.file);
+};
+
+$('slider').oninput = e => setT(+e.target.value);
+$('play').onclick = play;
+$('tbody').onclick = e => { const tr = e.target.closest('tr[data-name]'); if (tr) { sel = sel === tr.dataset.name ? null : tr.dataset.name; update(); } };
+$('events').onclick = e => { const d = e.target.closest('[data-i]'); if (d) { const ev = EVENTS[d.dataset.i]; if (ev.who) sel = ev.who; setT(ev.m); } };
+$('userCard').addEventListener('click', e => { const tr = e.target.closest('tr[data-m]'); if (tr) setT(+tr.dataset.m); });
+addEventListener('keydown', e => {
+  if (!D || e.target.tagName === 'SELECT') return;
+  if (e.key === 'ArrowRight') { setT(T + 1); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { setT(T - 1); e.preventDefault(); }
+  else if (e.key === ' ') { play(); e.preventDefault(); }
+});
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => D && D.start && update(), 150); });
+// 別台電腦開的只能看：不顯示另存、刪除、匯入
+fetch('/api/me').then(r => r.json()).then(me => document.body.classList.toggle('viewer', !me.control)).catch(() => {});
+init();
+</script>
+</body>
+</html>
